@@ -1,0 +1,18 @@
+<AddIn name="Clarion Window Formatter" author="ClarionAssistant" description="Formatea ventanas Clarion con IA (Claude API)">
+  <Manifest>
+    <Identity name="ClarionWindowFormatter" version="2.0.0"/>
+  </Manifest>
+  <Runtime>
+    <Import assembly="ClarionWindowFormatter.dll"/>
+  </Runtime>
+
+  <Path name="/Workspace/Tools">
+    <MenuItem id="WindowFormatterSeparator" type="Separator"/>
+    <MenuItem id="FormatWindowWithAi"
+              label="Formatear ventana con IA (Claude)..."
+              class="ClarionWindowFormatter.Commands.FormatWindowWithAiCommand"/>
+    <MenuItem id="FormatWindowSettings"
+              label="Formatear ventana - Configuracion..."
+              class="ClarionWindowFormatter.Commands.FormatWindowSettingsCommand"/>
+  </Path>
+</AddIn>
