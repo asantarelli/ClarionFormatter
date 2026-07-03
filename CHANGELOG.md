@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.0.1] - 2026-07-03
+
+### Bugfix
+
+- Menú del IDE mostraba opciones eliminadas (formatter clásico, clipboard) porque el `.addin` deployado se generaba desde una copia en `bin\Debug\` en lugar de directamente desde el template.
+- `deploy.ps1` corregido: el `.addin` ahora se copia directamente desde el template al destino, sin pasar por `bin\Debug\`.
+
 ## [2.0.0] - 2026-06-30
 
 ### Rediseño completo — solo IA

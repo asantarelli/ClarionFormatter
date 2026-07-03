@@ -4,34 +4,29 @@ $ErrorActionPreference = "Continue"
 $projectDir = $PSScriptRoot
 $addinName  = "ClarionWindowFormatter"
 $src        = Join-Path $projectDir "bin\Debug"
+$template   = Join-Path $projectDir "$addinName.addin.template"
+$dest       = Join-Path $ClarionRoot "accessory\addins\$addinName"
 
-Write-Host "Building $addinName..."
+# Generar .addin desde template ANTES de copiar
+if (-not (Test-Path $template)) { Write-Error "Template no encontrado: $template"; exit 1 }
+$addinOut = Join-Path $dest "$addinName.addin"
 
-$msbuild = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\2022\BuildTools\MSBuild\Current\Bin\MSBuild.exe" 2>$null
-if (-not $msbuild) {
-    $msbuild = (Get-Command msbuild -ErrorAction SilentlyContinue)?.Source
-}
-
-& msbuild "$projectDir\$addinName.csproj" /p:Configuration=Debug /p:ClarionRoot="$ClarionRoot" /v:minimal
-if ($LASTEXITCODE -ne 0) { Write-Error "Build failed"; exit 1 }
-
-# Generar .addin desde template
-$template  = Join-Path $projectDir "$addinName.addin.template"
-$addinOut  = Join-Path $src "$addinName.addin"
-Copy-Item $template $addinOut -Force
-
-# Deploy
-$dest = Join-Path $ClarionRoot "accessory\addins\$addinName"
-if (-not (Test-Path $ClarionRoot)) { Write-Warning "Clarion root not found: $ClarionRoot"; exit 0 }
+if (-not (Test-Path $ClarionRoot)) { Write-Warning "Clarion root no encontrado: $ClarionRoot"; exit 0 }
 if (-not (Test-Path $dest)) { New-Item -ItemType Directory -Path $dest -Force | Out-Null }
 
-$files = @("$addinName.dll", "$addinName.pdb", "$addinName.addin")
-foreach ($f in $files) {
+# Copiar DLL y PDB
+foreach ($f in @("$addinName.dll", "$addinName.pdb")) {
     $s = Join-Path $src $f
     if (Test-Path $s) {
         try { Copy-Item $s $dest -Force; Write-Host "  OK  $f" }
         catch { Write-Warning "  FAIL $f - $($_.Exception.Message)" }
+    } else {
+        Write-Warning "  NO ENCONTRADO: $f (compilar primero)"
     }
 }
+
+# Copiar .addin directamente desde template al destino (no pasa por bin\Debug)
+try { Copy-Item $template $addinOut -Force; Write-Host "  OK  $addinName.addin (desde template)" }
+catch { Write-Warning "  FAIL $addinName.addin - $($_.Exception.Message)" }
 
 Write-Host "Deploy completo -> $dest"
