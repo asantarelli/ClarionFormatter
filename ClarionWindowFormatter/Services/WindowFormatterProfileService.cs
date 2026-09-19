@@ -12,11 +12,29 @@ namespace ClarionWindowFormatter.Services
         {
             string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
             if (!string.IsNullOrEmpty(appData))
-                return Path.Combine(appData, "ClarionAssistant", "window-formatter.json");
+            {
+                string path = Path.Combine(appData, "ClarionWindowFormatter", "window-formatter.json");
+                MigrateLegacySettings(Path.Combine(appData, "ClarionAssistant", "window-formatter.json"), path);
+                return path;
+            }
 
             string asmDir = Path.GetDirectoryName(
                 System.Reflection.Assembly.GetExecutingAssembly().Location);
             return Path.Combine(asmDir ?? ".", "window-formatter.json");
+        }
+
+        // Hasta 2.1.0 la configuracion vivia en %APPDATA%\ClarionAssistant\ (carpeta de otro addin).
+        // Se mueve una sola vez a la carpeta propia; si no se puede mover, se copia.
+        private static void MigrateLegacySettings(string legacyPath, string newPath)
+        {
+            try
+            {
+                if (File.Exists(newPath) || !File.Exists(legacyPath)) return;
+                Directory.CreateDirectory(Path.GetDirectoryName(newPath));
+                try { File.Move(legacyPath, newPath); }
+                catch { File.Copy(legacyPath, newPath); }
+            }
+            catch { }
         }
 
         private static WindowFormatterSettings _cached;

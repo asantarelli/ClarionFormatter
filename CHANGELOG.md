@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.1.1] - 2026-09-19
+
+### Atribución y configuración propia
+
+- `LICENSE` incluye el aviso de copyright y licencia MIT de Clarion Assistant (ClarionLive), del que deriva `Services/EditorService.cs`. El archivo lleva además una cabecera con el origen, y el README lo menciona.
+- El manifiesto `.addin` declara `author="asantarelli"` (antes decía `ClarionAssistant`).
+- La configuración se guarda en `%APPDATA%\ClarionWindowFormatter\` en lugar de `%APPDATA%\ClarionAssistant\`. La primera vez que se abre, el addin mueve `window-formatter.json` de la carpeta anterior, así que no se pierden perfiles ni la API key.
+
 ## [2.1.0] - 2026-09-19
 
 ### Reglas por tipo de control

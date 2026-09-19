@@ -92,6 +92,8 @@ msbuild ClarionWindowFormatter\ClarionWindowFormatter.csproj /p:Configuration=De
 
 MIT License — ver [LICENSE](LICENSE)
 
+`Services/EditorService.cs` deriva de [Clarion Assistant](https://github.com/ClarionLive/ClarionAssistant) (Copyright (c) 2025-2026 ClarionLive, MIT). Su aviso de copyright y licencia se conserva en [LICENSE](LICENSE).
+
 ---
 
 ## Contribuciones

@@ -45,7 +45,7 @@ Ir a **Tools → Formatear ventana - Configuracion...**
 
 Pegar la clave de Anthropic en el campo **API Key**. Se almacena en:
 ```
-%APPDATA%\ClarionAssistant\window-formatter.json
+%APPDATA%\ClarionWindowFormatter\window-formatter.json
 ```
 No se envía a ningún lugar más que a la API de Anthropic.
 
@@ -188,7 +188,7 @@ Depende del tamaño de la ventana y de las reglas. Desde la versión 2.1 cada fo
 
 **¿Puedo compartir mis reglas con el equipo?**
 
-Las reglas se guardan en `%APPDATA%\ClarionAssistant\window-formatter.json`. Se puede compartir ese archivo, pero **contiene la API Key**: borrarla antes de pasarlo.
+Las reglas se guardan en `%APPDATA%\ClarionWindowFormatter\window-formatter.json`. Se puede compartir ese archivo, pero **contiene la API Key**: borrarla antes de pasarlo.
 
 **¿Funciona con Clarion 12?**
 
