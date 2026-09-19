@@ -5,7 +5,7 @@
 1. [Instalación](#instalación)
 2. [Configuración inicial](#configuración-inicial)
 3. [Uso cotidiano](#uso-cotidiano)
-4. [El archivo de protocolo](#el-archivo-de-protocolo)
+4. [Reglas de formato](#reglas-de-formato)
 5. [Perfiles](#perfiles)
 6. [Solución de problemas](#solución-de-problemas)
 7. [Preguntas frecuentes](#preguntas-frecuentes)
@@ -58,15 +58,9 @@ El modelo predeterminado es `claude-sonnet-4-6`, que ofrece la mejor calidad par
 | `claude-sonnet-4-6` | Normal (~10s) | Alta | Medio |
 | `claude-haiku-4-5-20251001` | Rápido (~3s) | Media | Bajo |
 
-### Archivo de protocolo
+### Reglas de formato
 
-Hacer clic en `...` para seleccionar tu archivo `.md` de protocolo, o escribir la ruta directamente.
-
-Si no configurás ninguno, el addin busca automáticamente:
-```
-%APPDATA%\ClarionAssistant\Protocolo_WindowFormatter.md
-```
-Podés copiar el [ejemplo incluido](protocolo/Protocolo_WindowFormatter.md) a esa ubicación como punto de partida.
+En la pestaña **Controles**, hacer clic en **Importar protocolo v2.5 como valores por defecto** para cargar un juego de reglas completo como punto de partida. Después se pueden ajustar control por control (ver [Reglas de formato](#reglas-de-formato)).
 
 ---
 
@@ -75,7 +69,7 @@ Podés copiar el [ejemplo incluido](protocolo/Protocolo_WindowFormatter.md) a es
 1. Abrir el archivo `.clw` en el editor del IDE
 2. Asegurarse de que el cursor esté dentro del bloque `WINDOW...END`
 3. Ir a **Tools → Formatear ventana con IA (Claude)...**
-4. Esperar la respuesta de Claude (aparece un diálogo de progreso con botón Cancelar)
+4. Esperar la respuesta de Claude. El diálogo de progreso muestra dos pasos: *Reformateando ventana* y *Verificando resultado*. Se puede cancelar en cualquier momento
 5. Revisar el resultado en el editor
 6. Si está conforme, guardar con `Ctrl+S`
 7. Si no está conforme, deshacer con `Ctrl+Z`
@@ -84,37 +78,40 @@ Podés copiar el [ejemplo incluido](protocolo/Protocolo_WindowFormatter.md) a es
 
 ---
 
-## El archivo de protocolo
+## Reglas de formato
 
-El archivo de protocolo es el corazón del addin. Es un archivo de texto (`.md`) que contiene las reglas que Claude debe seguir al reformatear la ventana.
+Las reglas se definen en la pestaña **Controles** de la configuración, una ficha por tipo de control: `WINDOW`, `PROMPT`, `ENTRY`, `TEXT`, `CHECK`, `OPTION`, `LIST`, `COMBO`, `BUTTON`, `STRING`, `IMAGE`, `GROUP`, `PANEL`, `SHEET`, `TAB`, `SPIN`.
 
-### ¿Qué puede incluir?
+### Campos de cada regla
 
-- Reglas de coordenadas (posición Y de la primera fila, espaciado entre filas, margen X)
-- Reglas de alturas de controles
-- Esquema de colores semántico
-- Reglas de tooltips
-- Reglas de limpieza de código (qué conservar, qué eliminar)
-- Reglas específicas por tipo de ventana (formularios, browses)
-- Ejemplos de antes/después
-- Cualquier otra convención de tu equipo
+| Campo | Qué indica |
+|-------|------------|
+| **Y base** | Y de la primera fila |
+| **Incremento Y** | Separación vertical entre filas |
+| **X etiqueta / X control** | Columna de las etiquetas y de los controles |
+| **Altura, Ancho mín., Ancho máx.** | Dimensiones del control |
+| **COLOR** | Atributo de color, ej. `COLOR(00E0F0FFh)` |
+| **Generar TIP automáticamente** | Si se agrega `TIP()`. La plantilla admite `{LABEL}` |
+| **Reglas adicionales** | Texto libre, una regla por línea (casos especiales, alineaciones, excepciones) |
 
-### ¿Cómo editarlo?
+Los campos vacíos se omiten. Si un control no tiene ningún valor cargado, no se envía.
 
-Desde la configuración del addin, hacer clic en **Editar protocolo** — esto abre el archivo en el editor predeterminado del sistema.
+### ¿Cómo se usa?
 
-También podés editarlo con cualquier editor de texto: Notepad, VS Code, Notepad++, etc.
+Al formatear, el addin arma un protocolo con las reglas del perfil activo y las **Notas adicionales**, y hace dos llamadas a Claude:
 
-Los cambios se aplican en el próximo formateo, sin reiniciar el IDE.
+1. **Reformatear**: aplica las reglas al bloque `WINDOW`.
+2. **Verificar**: revisa el resultado contra las mismas reglas y corrige incumplimientos.
 
-### Ejemplo incluido
+En ambos pasos se le indica a Claude que conserve sin cambios `USE()`, `FORMAT()`, `MSG()`, `#SEQ()`, `#ORIG()`, `#ORDINAL()`, `#LINK()`, `#FIELDS()` y los textos, y que no agregue ni quite controles.
 
-El archivo [protocolo/Protocolo_WindowFormatter.md](protocolo/Protocolo_WindowFormatter.md) es un ejemplo completo basado en el Protocolo Clarion v2.5, con reglas para:
-- Formularios de entrada de datos
-- Ventanas de tipo Browse
-- Colores semánticos
-- Tooltips descriptivos
-- Dimensiones de ventana
+Los cambios en las reglas se aplican en el próximo formateo, sin reiniciar el IDE.
+
+### Valores por defecto (Protocolo v2.5)
+
+El botón **Importar protocolo v2.5 como valores por defecto** carga reglas basadas en el Protocolo Clarion v2.5: formularios de entrada, ventanas Browse, colores semánticos, tooltips y dimensiones de ventana. El documento original está en [protocolo/Protocolo_WindowFormatter.md](protocolo/Protocolo_WindowFormatter.md) como referencia.
+
+> **Actualizando desde 2.0.x:** el archivo de protocolo `.md` ya no se usa. Los perfiles existentes conservan nombre e instrucciones adicionales, pero hay que cargar las reglas en la pestaña **Controles** (por ejemplo, importando el Protocolo v2.5).
 
 ---
 
@@ -127,7 +124,7 @@ Los perfiles permiten tener diferentes configuraciones para diferentes proyectos
 1. Abrir la configuración
 2. Hacer clic en **Nuevo**
 3. Asignar un nombre (ej: "Proyecto ABC")
-4. Seleccionar el archivo de protocolo correspondiente
+4. Cargar las reglas en la pestaña **Controles**
 
 ### Cambiar de perfil
 
@@ -136,7 +133,7 @@ Seleccionar el perfil deseado en el combo de la parte superior de la configuraci
 ### ¿Para qué usar perfiles?
 
 - Distintos proyectos con distintas convenciones de formato
-- Variantes de un mismo protocolo (ej: formularios simples vs. formularios complejos)
+- Variantes de un mismo juego de reglas (ej: formularios simples vs. formularios complejos)
 - Un perfil "estricto" y uno "permisivo" según el estado del proyecto
 
 ---
@@ -171,9 +168,9 @@ Seleccionar el perfil deseado en el combo de la parte superior de la configuraci
 
 ### El resultado tiene errores de compilación en Clarion
 
-- Revisar el archivo de protocolo — puede estar indicando cambios que no aplican al tipo de ventana
-- Agregar instrucciones más precisas en **Instrucciones adicionales** del perfil
-- Usar `Ctrl+Z` para deshacer y ajustar el protocolo
+- Revisar las reglas del control afectado — pueden estar indicando cambios que no aplican al tipo de ventana
+- Agregar instrucciones más precisas en **Notas adicionales** del perfil
+- Usar `Ctrl+Z` para deshacer y ajustar las reglas
 
 ---
 
@@ -181,17 +178,17 @@ Seleccionar el perfil deseado en el combo de la parte superior de la configuraci
 
 **¿Mis archivos de código se envían a Anthropic?**
 
-Solo el bloque `WINDOW...END` del archivo activo se envía a la API junto con el contenido del archivo de protocolo. No se envía ningún otro código.
+Solo el bloque `WINDOW...END` del archivo activo se envía a la API, junto con las reglas del perfil. No se envía ningún otro código.
 
 **¿Cuánto cuesta cada formateo?**
 
-Depende del tamaño de la ventana y del protocolo. Aproximadamente:
-- Con `claude-sonnet-4-6`: ~$0.002 a $0.010 por ventana
-- Con `claude-haiku-4-5-20251001`: ~$0.0002 a $0.001 por ventana
+Depende del tamaño de la ventana y de las reglas. Desde la versión 2.1 cada formateo hace dos llamadas (reformatear + verificar), así que el costo es aproximadamente el doble que en 2.0:
+- Con `claude-sonnet-4-6`: ~$0.004 a $0.020 por ventana
+- Con `claude-haiku-4-5-20251001`: ~$0.0004 a $0.002 por ventana
 
-**¿Puedo compartir mi archivo de protocolo con el equipo?**
+**¿Puedo compartir mis reglas con el equipo?**
 
-Sí, es un archivo de texto plano. Podés versionarlo en tu repositorio de código o compartirlo por cualquier medio. Cada integrante del equipo lo configura en su perfil local.
+Las reglas se guardan en `%APPDATA%\ClarionAssistant\window-formatter.json`. Se puede compartir ese archivo, pero **contiene la API Key**: borrarla antes de pasarlo.
 
 **¿Funciona con Clarion 12?**
 

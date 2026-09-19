@@ -95,8 +95,37 @@ namespace ClarionWindowFormatter.Services
             string i2 = indent + "  ";
             sb.AppendLine(indent + "{");
             sb.AppendLine(i2 + Q("ProfileName") + ": " + Q(p.ProfileName) + ",");
-            sb.AppendLine(i2 + Q("AiProtocolFile") + ": " + Q(p.AiProtocolFile) + ",");
-            sb.AppendLine(i2 + Q("AiExtraInstructions") + ": " + Q(p.AiExtraInstructions));
+            sb.AppendLine(i2 + Q("AiExtraInstructions") + ": " + Q(p.AiExtraInstructions) + ",");
+            sb.AppendLine(i2 + Q("ControlRules") + ": [");
+            string i3 = i2 + "  ";
+            for (int i = 0; i < p.ControlRules.Count; i++)
+            {
+                sb.Append(SerializeControlRule(p.ControlRules[i], i3));
+                if (i < p.ControlRules.Count - 1) sb.Append(",");
+                sb.AppendLine();
+            }
+            sb.AppendLine(i2 + "]");
+            sb.Append(indent + "}");
+            return sb.ToString();
+        }
+
+        private static string SerializeControlRule(ControlTypeRule r, string indent)
+        {
+            var sb = new StringBuilder();
+            string i2 = indent + "  ";
+            sb.AppendLine(indent + "{");
+            sb.AppendLine(i2 + Q("ControlType") + ": " + Q(r.ControlType) + ",");
+            sb.AppendLine(i2 + Q("YBase") + ": " + Q(r.YBase) + ",");
+            sb.AppendLine(i2 + Q("YIncrement") + ": " + Q(r.YIncrement) + ",");
+            sb.AppendLine(i2 + Q("XLabel") + ": " + Q(r.XLabel) + ",");
+            sb.AppendLine(i2 + Q("XControl") + ": " + Q(r.XControl) + ",");
+            sb.AppendLine(i2 + Q("Height") + ": " + Q(r.Height) + ",");
+            sb.AppendLine(i2 + Q("MinWidth") + ": " + Q(r.MinWidth) + ",");
+            sb.AppendLine(i2 + Q("MaxWidth") + ": " + Q(r.MaxWidth) + ",");
+            sb.AppendLine(i2 + Q("ColorAttr") + ": " + Q(r.ColorAttr) + ",");
+            sb.AppendLine(i2 + Q("GenerateTip") + ": " + (r.GenerateTip ? "true" : "false") + ",");
+            sb.AppendLine(i2 + Q("TipTemplate") + ": " + Q(r.TipTemplate) + ",");
+            sb.AppendLine(i2 + Q("ExtraRules") + ": " + Q(r.ExtraRules));
             sb.Append(indent + "}");
             return sb.ToString();
         }
@@ -139,9 +168,48 @@ namespace ClarionWindowFormatter.Services
         {
             var p = new WindowFormatterProfile();
             p.ProfileName         = ReadString(block, "ProfileName")         ?? p.ProfileName;
-            p.AiProtocolFile      = ReadString(block, "AiProtocolFile")      ?? p.AiProtocolFile;
             p.AiExtraInstructions = ReadString(block, "AiExtraInstructions") ?? p.AiExtraInstructions;
+
+            int rulesStart = block.IndexOf("\"ControlRules\"", StringComparison.Ordinal);
+            if (rulesStart >= 0)
+            {
+                int arrayStart = block.IndexOf('[', rulesStart);
+                if (arrayStart >= 0)
+                {
+                    int pos = arrayStart + 1;
+                    while (pos < block.Length)
+                    {
+                        int objStart = block.IndexOf('{', pos);
+                        if (objStart < 0) break;
+                        int objEnd = FindMatchingBrace(block, objStart);
+                        if (objEnd < 0) break;
+                        string ruleBlock = block.Substring(objStart, objEnd - objStart + 1);
+                        var rule = ParseControlRule(ruleBlock);
+                        if (rule != null) p.ControlRules.Add(rule);
+                        pos = objEnd + 1;
+                    }
+                }
+            }
+
             return p;
+        }
+
+        private static ControlTypeRule ParseControlRule(string block)
+        {
+            var r = new ControlTypeRule();
+            r.ControlType = ReadString(block, "ControlType") ?? "";
+            r.YBase       = ReadString(block, "YBase")       ?? "";
+            r.YIncrement  = ReadString(block, "YIncrement")  ?? "";
+            r.XLabel      = ReadString(block, "XLabel")      ?? "";
+            r.XControl    = ReadString(block, "XControl")    ?? "";
+            r.Height      = ReadString(block, "Height")      ?? "";
+            r.MinWidth    = ReadString(block, "MinWidth")    ?? "";
+            r.MaxWidth    = ReadString(block, "MaxWidth")    ?? "";
+            r.ColorAttr   = ReadString(block, "ColorAttr")   ?? "";
+            r.GenerateTip = ReadBool(block, "GenerateTip");
+            r.TipTemplate = ReadString(block, "TipTemplate") ?? "";
+            r.ExtraRules  = ReadString(block, "ExtraRules")  ?? "";
+            return r;
         }
 
         private static string ReadString(string json, string key)
@@ -161,10 +229,26 @@ namespace ClarionWindowFormatter.Services
                 q2++;
             }
             if (q2 >= json.Length) return null;
-            return json.Substring(q1 + 1, q2 - q1 - 1).Replace("\\\"", "\"").Replace("\\\\", "\\").Replace("\\n", "\n").Replace("\\r", "\r");
+            return json.Substring(q1 + 1, q2 - q1 - 1)
+                       .Replace("\\\"", "\"").Replace("\\\\", "\\")
+                       .Replace("\\n", "\n").Replace("\\r", "\r");
         }
 
-        private static string Q(string s) => "\"" + (s ?? "").Replace("\\", "\\\\").Replace("\"", "\\\"").Replace("\n", "\\n").Replace("\r", "\\r") + "\"";
+        private static bool ReadBool(string json, string key)
+        {
+            string pat = "\"" + key + "\"";
+            int k = json.IndexOf(pat, StringComparison.Ordinal);
+            if (k < 0) return false;
+            int colon = json.IndexOf(':', k + pat.Length);
+            if (colon < 0) return false;
+            int pos = colon + 1;
+            while (pos < json.Length && json[pos] == ' ') pos++;
+            return pos + 4 <= json.Length && json.Substring(pos, 4) == "true";
+        }
+
+        private static string Q(string s)
+            => "\"" + (s ?? "").Replace("\\", "\\\\").Replace("\"", "\\\"")
+                               .Replace("\n", "\\n").Replace("\r", "\\r") + "\"";
 
         private static int FindMatchingBrace(string s, int open)
         {

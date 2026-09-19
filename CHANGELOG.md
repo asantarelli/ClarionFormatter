@@ -1,5 +1,18 @@
 # Changelog
 
+## [2.1.0] - 2026-09-19
+
+### Reglas por tipo de control
+
+- **Reglas estructuradas** en lugar del archivo de protocolo `.md`: la pestaña **Controles** permite definir, por tipo de control, Y base, incremento Y, X de etiqueta/control, altura, anchos, color, generación de TIP (con plantilla `{LABEL}`) y reglas adicionales en texto libre.
+- Botón **Importar protocolo v2.5 como valores por defecto** para cargar un juego de reglas completo.
+- **Formateo en dos pasadas**: paso 1 reformatea, paso 2 verifica el resultado contra las reglas y corrige. Si el paso 2 no devuelve un bloque válido, se usa el del paso 1.
+- Configuración reorganizada en pestañas: Controles, Notas adicionales, API Claude.
+
+### Cambios incompatibles
+
+- Se eliminó el soporte de archivo de protocolo `.md` (`AiProtocolFile`) y el fallback a `%APPDATA%\ClarionAssistant\Protocolo_WindowFormatter.md`. Los perfiles existentes conservan nombre e instrucciones adicionales; las reglas deben cargarse en la pestaña Controles.
+
 ## [2.0.1] - 2026-07-03
 
 ### Bugfix

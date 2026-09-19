@@ -2,16 +2,17 @@
 
 Addin para el IDE de **Clarion 11/12** que reformatea bloques `WINDOW` usando la API de Claude (Anthropic AI).
 
-El addin lee un archivo de protocolo `.md` definido por el usuario y le pide a Claude que aplique esas reglas directamente sobre el código de la ventana abierta en el editor, sin necesidad de copiar y pegar.
+Las reglas de formato se configuran por tipo de control (coordenadas, alturas, colores, tooltips) desde la configuración del addin. Claude las aplica directamente sobre el código de la ventana abierta en el editor, sin necesidad de copiar y pegar.
 
 ---
 
 ## Características
 
 - Reformatea el bloque `WINDOW...END` del archivo activo directamente en el editor
-- Utiliza un **archivo de protocolo personalizable** (`.md`) que define las reglas de formato
-- Soporte de **múltiples perfiles**: uno por proyecto, cada uno con su propio protocolo
-- Fallback automático al archivo `Protocolo_WindowFormatter.md` en `%APPDATA%\ClarionAssistant\`
+- **Reglas por tipo de control** (WINDOW, PROMPT, ENTRY, TEXT, CHECK, LIST, BUTTON, SHEET, etc.): coordenadas, alturas, anchos, color, TIP y reglas extra
+- **Dos pasadas**: Claude reformatea la ventana y luego verifica el resultado contra las reglas, corrigiendo incumplimientos
+- Botón para importar el **Protocolo Clarion v2.5** como valores por defecto
+- Soporte de **múltiples perfiles**: uno por proyecto, cada uno con sus propias reglas
 - Instrucciones adicionales por perfil (campo libre de texto)
 - Compatible con Clarion 11 y Clarion 12
 
@@ -43,21 +44,26 @@ El addin lee un archivo de protocolo `.md` definido por el usuario y le pide a C
 
 Ir a **Tools → Formatear ventana - Configuracion...**
 
-| Campo | Descripción |
-|-------|-------------|
-| **API Key** | Tu clave de Anthropic (global, todos los perfiles) |
-| **Modelo** | Modelo de Claude a usar (recomendado: `claude-sonnet-4-6`) |
-| **Archivo de protocolo** | Ruta al `.md` con tus reglas de formato (por perfil) |
-| **Instrucciones adicionales** | Reglas extra en texto libre (por perfil) |
+| Pestaña | Contenido |
+|---------|-----------|
+| **Controles** | Reglas por tipo de control (por perfil). Botón para importar el Protocolo v2.5 como punto de partida |
+| **Notas adicionales** | Instrucciones extra en texto libre (por perfil) |
+| **API Claude** | API Key de Anthropic y modelo a usar (global, todos los perfiles) |
 
-### Archivo de protocolo
+### Reglas por control
 
-El archivo de protocolo es un `.md` de texto libre que describe las reglas que Claude debe aplicar al formatear la ventana. Incluye un [ejemplo completo](protocolo/Protocolo_WindowFormatter.md) en este repositorio.
+Para cada tipo de control se puede definir:
 
-Si no configurás un archivo de protocolo, el addin busca automáticamente:
-```
-%APPDATA%\ClarionAssistant\Protocolo_WindowFormatter.md
-```
+| Campo | Ejemplo |
+|-------|---------|
+| Y base / Incremento Y | `23` / `14` |
+| X etiqueta / X control | `11` / — |
+| Altura / Ancho mín. / Ancho máx. | `9` |
+| Color | `COLOR(00E0F0FFh)` |
+| Generar TIP + plantilla | `REQUERIDO - {LABEL} (Enter para validar)` |
+| Reglas adicionales | Texto libre, una regla por línea |
+
+Los campos vacíos no se envían. Con las reglas definidas, el addin arma el protocolo que recibe Claude. El documento [protocolo/Protocolo_WindowFormatter.md](protocolo/Protocolo_WindowFormatter.md) queda como referencia del Protocolo v2.5 en que se basan los valores por defecto.
 
 ---
 
@@ -65,7 +71,7 @@ Si no configurás un archivo de protocolo, el addin busca automáticamente:
 
 1. Abrir un archivo `.clw` en el editor del IDE con un bloque `WINDOW`
 2. Ir a **Tools → Formatear ventana con IA (Claude)...**
-3. Claude reformatea la ventana y aplica el resultado directamente en el editor
+3. Claude reformatea la ventana (paso 1/2), verifica el resultado contra las reglas (paso 2/2) y lo aplica directamente en el editor
 4. Revisar el resultado y guardar con `Ctrl+S`
 
 > **Nota:** El addin reemplaza el bloque `WINDOW...END` completo. Se recomienda tener el archivo bajo control de versiones antes de aplicar.
@@ -90,4 +96,4 @@ MIT License — ver [LICENSE](LICENSE)
 
 ## Contribuciones
 
-Los PRs son bienvenidos. Si tenés un archivo de protocolo interesante para compartir, podés agregarlo en la carpeta `protocolo/`.
+Los PRs son bienvenidos.

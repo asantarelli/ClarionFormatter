@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
@@ -9,11 +11,6 @@ using ClarionWindowFormatter.Services;
 
 namespace ClarionWindowFormatter.Commands
 {
-    /// <summary>
-    /// Extrae el bloque WINDOW del editor, llama a la API de Claude con las
-    /// reglas del perfil activo, y aplica el resultado directo en el editor.
-    /// Sin clipboard, sin copy-paste manual.
-    /// </summary>
     public class FormatWindowWithAiCommand : AbstractMenuCommand
     {
         public override void Run()
@@ -22,7 +19,6 @@ namespace ClarionWindowFormatter.Commands
             {
                 var settings = WindowFormatterProfileService.Load();
 
-                // Prioridad: campo configurado > variable de entorno (Claude Code / Max plan)
                 string apiKey = settings.AnthropicApiKey;
                 if (string.IsNullOrWhiteSpace(apiKey))
                     apiKey = Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY");
@@ -31,11 +27,8 @@ namespace ClarionWindowFormatter.Commands
                 {
                     MessageBox.Show(
                         "No hay API key disponible.\n\n" +
-                        "Opciones:\n" +
-                        "1. Ve a: Tools > Formatear ventana - Configuracion > pestana IA\n" +
-                        "   y pega tu clave de Anthropic (sk-ant-...).\n\n" +
-                        "2. O asegurate de tener Claude Code instalado y configurado\n" +
-                        "   (usa la variable de entorno ANTHROPIC_API_KEY automaticamente).",
+                        "Ve a: Tools > Formatear ventana - Configuracion\n" +
+                        "y pega tu clave de Anthropic (sk-ant-...).",
                         "Formatear con IA", MessageBoxButtons.OK, MessageBoxIcon.Information);
                     return;
                 }
@@ -60,25 +53,34 @@ namespace ClarionWindowFormatter.Commands
                 }
 
                 var profile = WindowFormatterProfileService.GetActiveProfile();
-                string resolvedProtocol = ResolveProtocolFile(profile.AiProtocolFile);
-                string prompt = BuildPrompt(windowBlock, profile, resolvedProtocol);
+                string prompt1 = BuildFormatPrompt(windowBlock, profile);
+                string prompt2Template = BuildValidationPromptTemplate(profile);
 
-                // Mostrar dialogo de progreso y llamar la API en background
-                string result = null;
+                string result1 = null, result2 = null;
                 Exception error = null;
 
-                using (var dlg = new ProgressDialog("Consultando a Claude... (puede tardar unos segundos)"))
+                using (var dlg = new ProgressDialog("Paso 1/2 — Reformateando ventana..."))
                 {
                     var ct = dlg.CancellationToken;
 
-                    // Llamar API en thread separado para no bloquear el UI
-                    var thread = new System.Threading.Thread(() =>
+                    var thread = new Thread(() =>
                     {
                         try
                         {
-                            var task = AnthropicApiClient.SendMessageAsync(
-                                apiKey, settings.AiModel, prompt, ct);
-                            result = task.GetAwaiter().GetResult();
+                            // Paso 1: formatear
+                            var task1 = AnthropicApiClient.SendMessageAsync(apiKey, settings.AiModel, prompt1, ct);
+                            result1 = task1.GetAwaiter().GetResult();
+
+                            if (ct.IsCancellationRequested || result1 == null) return;
+
+                            string block1 = ExtractWindowBlock(result1);
+                            if (block1 == null) return;
+
+                            // Paso 2: validar y corregir
+                            dlg.SetStatus("Paso 2/2 — Verificando resultado...");
+                            string prompt2 = prompt2Template + "\n\n--- BLOQUE A REVISAR ---\n\n" + block1;
+                            var task2 = AnthropicApiClient.SendMessageAsync(apiKey, settings.AiModel, prompt2, ct);
+                            result2 = task2.GetAwaiter().GetResult();
                         }
                         catch (OperationCanceledException) { }
                         catch (Exception ex) { error = ex; }
@@ -90,34 +92,38 @@ namespace ClarionWindowFormatter.Commands
                     });
                     thread.IsBackground = true;
                     thread.Start();
-
                     dlg.ShowDialog();
                 }
 
                 if (error != null)
                 {
                     string msg = error.Message;
-                    if (error.InnerException != null)
-                        msg += "\n\nDetalle: " + error.InnerException.Message;
+                    if (error.InnerException != null) msg += "\n\nDetalle: " + error.InnerException.Message;
                     MessageBox.Show("Error al llamar la API de Claude:\n\n" + msg,
                         "Formatear con IA", MessageBoxButtons.OK, MessageBoxIcon.Error);
                     return;
                 }
 
-                if (result == null) return; // cancelado
+                if (result1 == null) return; // cancelado en paso 1
 
-                // Extraer WINDOW...END de la respuesta
-                string newBlock = ExtractWindowBlock(result);
+                // Usar resultado del paso 2 si está disponible, sino paso 1
+                string finalResult = result2 ?? result1;
+                string newBlock = ExtractWindowBlock(finalResult);
+
                 if (newBlock == null)
                 {
-                    MessageBox.Show(
-                        "Claude respondio pero no se encontro un bloque WINDOW...END en la respuesta.\n\n" +
-                        "Respuesta recibida:\n" + (result.Length > 500 ? result.Substring(0, 500) + "..." : result),
-                        "Formatear con IA", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                    return;
+                    // Intentar con resultado del paso 1
+                    newBlock = ExtractWindowBlock(result1);
+                    if (newBlock == null)
+                    {
+                        MessageBox.Show(
+                            "Claude respondio pero no se encontro un bloque WINDOW...END en la respuesta.\n\n" +
+                            "Respuesta recibida:\n" + (result1.Length > 500 ? result1.Substring(0, 500) + "..." : result1),
+                            "Formatear con IA", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        return;
+                    }
                 }
 
-                // Ubicar el bloque original en el editor
                 var parser = new ClarionWindowParser();
                 var parsed = parser.Parse(source);
                 if (parsed == null)
@@ -152,9 +158,144 @@ namespace ClarionWindowFormatter.Commands
             }
         }
 
+        // ── Prompt building ───────────────────────────────────────────────────
+
+        private static string BuildFormatPrompt(string windowBlock, WindowFormatterProfile p)
+        {
+            var sb = new StringBuilder();
+            sb.AppendLine("Reformatea este bloque WINDOW de Clarion aplicando las reglas indicadas.");
+            sb.AppendLine("Devuelve UNICAMENTE el bloque WINDOW...END reformateado, sin explicaciones ni markdown.");
+            sb.AppendLine("CONSERVAR SIN CAMBIOS: USE(), FORMAT(), MSG(), #SEQ(), #ORIG(), #ORDINAL(), #LINK(), #FIELDS(), texto de labels, titulos y strings. No agregar ni quitar controles.");
+
+            AppendProtocolSection(sb, p);
+
+            sb.AppendLine();
+            sb.AppendLine("--- BLOQUE A REFORMATEAR ---");
+            sb.AppendLine();
+            sb.Append(windowBlock);
+            return sb.ToString();
+        }
+
+        private static string BuildValidationPromptTemplate(WindowFormatterProfile p)
+        {
+            var sb = new StringBuilder();
+            sb.AppendLine("Revisa el siguiente bloque WINDOW de Clarion y verifica que cumple EXACTAMENTE con las reglas del protocolo.");
+            sb.AppendLine("Si encuentras incumplimientos, corrigelos. Si todo esta correcto, devuelve el bloque sin cambios.");
+            sb.AppendLine("Devuelve UNICAMENTE el bloque WINDOW...END, sin explicaciones ni markdown.");
+            sb.AppendLine("CONSERVAR SIN CAMBIOS: USE(), FORMAT(), MSG(), #SEQ(), #ORIG(), #ORDINAL(), #LINK(), #FIELDS(), texto de labels, titulos y strings. No agregar ni quitar controles.");
+
+            AppendProtocolSection(sb, p);
+            return sb.ToString();
+        }
+
+        private static void AppendProtocolSection(StringBuilder sb, WindowFormatterProfile p)
+        {
+            string protocol = BuildProtocolFromRules(p);
+            bool hasRules = p.ControlRules.Any(r => HasAnyValue(r));
+
+            if (hasRules)
+            {
+                sb.AppendLine();
+                sb.AppendLine("=== PROTOCOLO DE FORMATEO ===");
+                sb.AppendLine();
+                sb.Append(protocol);
+                sb.AppendLine("=== FIN DEL PROTOCOLO ===");
+            }
+
+            if (!string.IsNullOrWhiteSpace(p.AiExtraInstructions))
+            {
+                sb.AppendLine();
+                sb.AppendLine("INSTRUCCIONES ADICIONALES:");
+                foreach (var line in p.AiExtraInstructions.Replace("\r\n", "\n").Split('\n'))
+                {
+                    string t = line.Trim();
+                    if (!string.IsNullOrEmpty(t)) sb.AppendLine("   - " + t);
+                }
+            }
+
+            if (!hasRules && string.IsNullOrWhiteSpace(p.AiExtraInstructions))
+            {
+                sb.AppendLine();
+                sb.AppendLine("Aplica las convenciones estandar de Clarion para coordenadas, alturas y colores.");
+            }
+        }
+
+        private static string BuildProtocolFromRules(WindowFormatterProfile p)
+        {
+            var sb = new StringBuilder();
+
+            foreach (var rule in p.ControlRules)
+            {
+                if (!HasAnyValue(rule)) continue;
+
+                sb.AppendLine("CONTROL: " + rule.ControlType);
+
+                var coords = new List<string>();
+                if (!string.IsNullOrEmpty(rule.YBase))      coords.Add("Y de la primera fila: " + rule.YBase);
+                if (!string.IsNullOrEmpty(rule.YIncrement)) coords.Add("Incremento Y entre filas: " + rule.YIncrement);
+                if (!string.IsNullOrEmpty(rule.XLabel))     coords.Add("X de las etiquetas: " + rule.XLabel);
+                if (!string.IsNullOrEmpty(rule.XControl))   coords.Add("X de los controles: " + rule.XControl);
+                if (coords.Count > 0)
+                {
+                    sb.AppendLine("  Coordenadas:");
+                    foreach (var l in coords) sb.AppendLine("    - " + l);
+                }
+
+                var dims = new List<string>();
+                if (!string.IsNullOrEmpty(rule.Height))   dims.Add("Altura: " + rule.Height);
+                if (!string.IsNullOrEmpty(rule.MinWidth)) dims.Add("Ancho minimo: " + rule.MinWidth);
+                if (!string.IsNullOrEmpty(rule.MaxWidth)) dims.Add("Ancho maximo: " + rule.MaxWidth);
+                if (dims.Count > 0)
+                {
+                    sb.AppendLine("  Dimensiones:");
+                    foreach (var l in dims) sb.AppendLine("    - " + l);
+                }
+
+                if (!string.IsNullOrEmpty(rule.ColorAttr))
+                    sb.AppendLine("  Color: " + rule.ColorAttr);
+
+                if (rule.GenerateTip)
+                {
+                    sb.Append("  Generar TIP automaticamente");
+                    if (!string.IsNullOrEmpty(rule.TipTemplate))
+                        sb.Append(" con plantilla: \"" + rule.TipTemplate + "\"");
+                    sb.AppendLine();
+                }
+                else
+                {
+                    sb.AppendLine("  No generar TIP en controles de este tipo.");
+                }
+
+                if (!string.IsNullOrWhiteSpace(rule.ExtraRules))
+                {
+                    sb.AppendLine("  Reglas adicionales:");
+                    foreach (var line in rule.ExtraRules.Replace("\r\n", "\n").Split('\n'))
+                    {
+                        string t = line.Trim();
+                        if (!string.IsNullOrEmpty(t)) sb.AppendLine("    - " + t);
+                    }
+                }
+
+                sb.AppendLine();
+            }
+
+            return sb.ToString();
+        }
+
+        private static bool HasAnyValue(ControlTypeRule r)
+        {
+            return !string.IsNullOrEmpty(r.YBase)      || !string.IsNullOrEmpty(r.YIncrement) ||
+                   !string.IsNullOrEmpty(r.XLabel)     || !string.IsNullOrEmpty(r.XControl)   ||
+                   !string.IsNullOrEmpty(r.Height)     || !string.IsNullOrEmpty(r.MinWidth)   ||
+                   !string.IsNullOrEmpty(r.MaxWidth)   || !string.IsNullOrEmpty(r.ColorAttr)  ||
+                   r.GenerateTip                       || !string.IsNullOrEmpty(r.TipTemplate) ||
+                   !string.IsNullOrEmpty(r.ExtraRules);
+        }
+
+        // ── Window block extraction ───────────────────────────────────────────
+
         private static string ExtractWindowBlock(string text)
         {
-            // Quitar fences de markdown si Claude los agrego
             text = Regex.Replace(text, @"```[^\n]*\n?", "", RegexOptions.IgnoreCase).Replace("```", "");
 
             var lines = text.Replace("\r\n", "\n").Replace("\r", "\n").Split('\n');
@@ -180,65 +321,6 @@ namespace ClarionWindowFormatter.Commands
                 }
             }
             return null;
-        }
-
-        private static string ResolveProtocolFile(string configured)
-        {
-            // 1. Archivo configurado en el perfil
-            if (!string.IsNullOrWhiteSpace(configured) && System.IO.File.Exists(configured))
-                return configured;
-
-            // 2. Predeterminado en %APPDATA%\ClarionAssistant\
-            string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-            string defaultPath = System.IO.Path.Combine(appData, "ClarionAssistant", "Protocolo_WindowFormatter.md");
-            if (System.IO.File.Exists(defaultPath))
-                return defaultPath;
-
-            // 3. Sin protocolo — se usarán las reglas hardcodeadas del perfil
-            return null;
-        }
-
-        private static string BuildPrompt(string windowBlock, WindowFormatterProfile p, string protocolFile = null)
-        {
-            var sb = new StringBuilder();
-
-            if (!string.IsNullOrWhiteSpace(protocolFile) && System.IO.File.Exists(protocolFile))
-            {
-                string protocol = System.IO.File.ReadAllText(protocolFile, Encoding.UTF8);
-                sb.AppendLine("Reformatea este bloque WINDOW de Clarion aplicando el protocolo que se indica a continuacion.");
-                sb.AppendLine("Devuelve UNICAMENTE el bloque WINDOW...END, sin explicaciones ni bloques de codigo markdown.");
-                sb.AppendLine();
-                sb.AppendLine("=== PROTOCOLO DE FORMATEO ===");
-                sb.AppendLine();
-                sb.AppendLine(protocol);
-                sb.AppendLine();
-                sb.AppendLine("=== FIN DEL PROTOCOLO ===");
-            }
-            else
-            {
-                sb.AppendLine("Reformatea este bloque WINDOW de Clarion aplicando las convenciones estandar de Clarion.");
-                sb.AppendLine("Devuelve UNICAMENTE el bloque WINDOW...END, sin explicaciones ni bloques de codigo markdown.");
-                sb.AppendLine("CONSERVAR SIN NINGUN CAMBIO: USE(), FORMAT(), MSG(), TIP(), ICON(), #SEQ(), #ORIG(),");
-                sb.AppendLine("#ORDINAL(), #LINK(), #FIELDS(), texto de labels, titulos y strings. No agregar ni quitar controles.");
-            }
-
-            if (!string.IsNullOrWhiteSpace(p.AiExtraInstructions))
-            {
-                sb.AppendLine();
-                sb.AppendLine("INSTRUCCIONES ADICIONALES DEL PERFIL:");
-                foreach (var line in p.AiExtraInstructions.Replace("\r\n", "\n").Split('\n'))
-                {
-                    string t = line.Trim();
-                    if (!string.IsNullOrEmpty(t)) sb.AppendLine("   - " + t);
-                }
-            }
-
-            sb.AppendLine();
-            sb.AppendLine("--- BLOQUE A REFORMATEAR ---");
-            sb.AppendLine();
-            sb.Append(windowBlock);
-
-            return sb.ToString();
         }
     }
 }

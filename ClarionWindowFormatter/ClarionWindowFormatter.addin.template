@@ -1,6 +1,6 @@
 <AddIn name="Clarion Window Formatter" author="ClarionAssistant" description="Formatea ventanas Clarion con IA (Claude API)">
   <Manifest>
-    <Identity name="ClarionWindowFormatter" version="2.0.0"/>
+    <Identity name="ClarionWindowFormatter" version="2.1.0"/>
   </Manifest>
   <Runtime>
     <Import assembly="ClarionWindowFormatter.dll"/>
